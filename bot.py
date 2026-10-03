@@ -1,43 +1,36 @@
-import os
 import asyncio
-import aiohttp
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import CommandStart
+from groq import AsyncGroq
 
 TELEGRAM_BOT_TOKEN = "8522172198:AAGNiYBdw_-IIERKpfg432s0uewEk52FhUI"
-HF_TOKEN = "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"
-
-API_URL = "https://api-inference.huggingface.co/models/damo-vilab/text-to-video-ms-1.7b"
-HEADERS = {"Authorization": f"Bearer {HF_TOKEN}"}
+GROQ_API_KEY = "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"
 
 bot = Bot(token=TELEGRAM_BOT_TOKEN)
 dp = Dispatcher()
+client = AsyncGroq(api_key=GROQ_API_KEY)
 
 @dp.message(CommandStart())
 async def start_cmd(message: types.Message):
-    await message.answer("👋 Привет! Напиши мне текстовый запрос на английском (например: 'a cute dog running on grass'), и я сгенерирую видео.")
+    await message.answer("👋 Привет! Я твой личный ИИ-ассистент. Задавай любой вопрос на русском или любом другом языке — я на связи!")
 
 @dp.message()
-async def make_video(message: types.Message):
-    prompt_text = message.text
-    status_msg = await message.answer("⏳ Создаю видео, это займёт около 1-2 минут...")
-
+async def chat_ai(message: types.Message):
+    await bot.send_chat_action(chat_id=message.chat.id, action="typing")
     try:
-        async with aiohttp.ClientSession() as session:
-            payload = {"inputs": prompt_text}
-            async with session.post(API_URL, headers=HEADERS, json=payload, timeout=aiohttp.ClientTimeout(total=180)) as resp:
-                if resp.status == 200:
-                    video_bytes = await resp.read()
-                    video_file = types.BufferedInputFile(video_bytes, filename="video.mp4")
-                    await message.answer_video(video=video_file, caption=f"🎬 {prompt_text}")
-                elif resp.status == 503:
-                    await message.answer("Модель прогревается на сервере. Подожди 30 секунд и отправь запрос ещё раз.")
-                else:
-                    await message.answer(f"Ошибка API: {resp.status}")
+        response = await client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[
+                {"role": "system", "content": "Ты дружелюбный, эрудированный и полезный ИИ-помощник. Отвечай подробно, понятно и с форматированием."},
+                {"role": "user", "content": message.text}
+            ],
+            temperature=0.7,
+            max_tokens=1024
+        )
+        answer = response.choices[0].message.content
+        await message.answer(answer)
     except Exception as e:
         await message.answer(f"⚠️ Ошибка: {e}")
-    finally:
-        await status_msg.delete()
 
 async def main():
     await dp.start_polling(bot)
